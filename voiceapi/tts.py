@@ -35,7 +35,8 @@ tts_configs = {
     },
     'kokoro-multi-lang-v1_0': {
         'model': 'model.onnx',
-        'lexicon': ['lexicon-zh.txt','lexicon-us-en.txt','lexicon-gb-en.txt'],
+        #'lexicon': ['lexicon-zh.txt','lexicon-us-en.txt','lexicon-gb-en.txt'],
+        'lexicon': 'lexicon-zh.txt',
         'dict_dir': 'dict',
         'tokens': 'tokens.txt',
         'sample_rate': 24000,
@@ -55,7 +56,7 @@ def load_tts_model(name: str, model_root: str, provider: str, num_threads: int =
     if 'kokoro' in name:
         kokoro_model_config = sherpa_onnx.OfflineTtsKokoroModelConfig(
             model=os.path.join(model_dir, cfg['model']),
-            lexicon=[os.path.join(model_dir, f) for f in cfg['lexicon']],
+            lexicon=cfg['lexicon'],
             dict_dir=os.path.join(model_dir, cfg['dict_dir']),
             tokens=os.path.join(model_dir, cfg['tokens']),
         )
