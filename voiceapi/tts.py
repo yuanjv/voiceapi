@@ -51,16 +51,27 @@ def load_tts_model(name: str, model_root: str, provider: str, num_threads: int =
     for f in cfg.get('rule_fsts', ''):
         fsts.append(os.path.join(model_dir, f))
     tts_rule_fsts = ','.join(fsts) if fsts else ''
-    lexicons = []
-    for f in cfg['lexicon']:
-        lexicons.append(os.path.join(model_dir, f))
-    model_config = sherpa_onnx.OfflineTtsModelConfig(
-        vits=sherpa_onnx.OfflineTtsVitsModelConfig(
+    vits_model_config = None
+    kokoro_model_config = None
+
+    if 'kokoro' in name:
+        kokoro_model_config = sherpa_onnx.OfflineTtsKokoroModelConfig(
             model=os.path.join(model_dir, cfg['model']),
-            lexicon=lexicons,
+            lexicon=[os.path.join(model_dir, f) for f in cfg['lexicon']],
             dict_dir=os.path.join(model_dir, cfg['dict_dir']),
             tokens=os.path.join(model_dir, cfg['tokens']),
-        ),
+        )
+    elif 'vits' in name:
+        vits_model_config = sherpa_onnx.OfflineTtsVitsModelConfig(
+            model=os.path.join(model_dir, cfg['model']),
+            lexicon=cfg['lexicon'],
+            dict_dir=os.path.join(model_dir, cfg['dict_dir']),
+            tokens=os.path.join(model_dir, cfg['tokens']),
+        )
+
+    model_config = sherpa_onnx.OfflineTtsModelConfig(
+        vits=vits_model_config,
+        kokoro=kokoro_model_config,
         provider=provider,
         debug=0,
         num_threads=num_threads,
