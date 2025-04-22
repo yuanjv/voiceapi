@@ -12,6 +12,7 @@ Thanks to [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx), we can ea
 | paraformer-en-2024-03-09               | English                       | Offline ASR | Paraformer, English                 |
 | vits-zh-hf-theresa                     | Chinese                       | TTS         | VITS, Chinese, 804 speakers         |
 | melo-tts-zh_en                         | Chinese + English             | TTS         | Melo, Chinese + English, 1 speakers |
+| kokoro-multi-lang-v1_0                 | Chinese + English             | TTS         | Chinese + English, 53 speakers      |
 
 ## Run the app locally
 Python 3.10+ is required
@@ -122,6 +123,23 @@ Only download the models you need. default models are:
 - asr models: `sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20`(Bilingual, Chinese + English). Streaming
 - tts models: `vits-zh-hf-theresa` (Chinese + English)
 
+### silero_vad.onnx
+> silero is required for ASR
+```bash
+mkdir -p silero_vad
+cd silero_vad
+curl -SL -o silero_vad/silero_vad.onnx https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx
+```
+
+###  FireRedASR-AED-L
+```bash
+curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-fire-red-asr-large-zh_en-2025-02-16.tar.bz2
+```
+### kokoro-multi-lang-v1_0
+```bash
+curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2
+```
+
 ### vits-zh-hf-theresa
 ```bash
 curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-zh-hf-theresa.tar.bz2
@@ -136,10 +154,6 @@ curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/v
 curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20.tar.bz2
 ```
 
-### silero_vad.onnx
-```bash
-curl -SL -O https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx
-```
 ### sherpa-onnx-paraformer-trilingual-zh-cantonese-en
 ```bash
 curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-paraformer-trilingual-zh-cantonese-en.tar.bz2

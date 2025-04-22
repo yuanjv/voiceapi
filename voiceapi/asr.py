@@ -182,6 +182,26 @@ def create_paraformer_en(samplerate: int, args) -> sherpa_onnx.OnlineRecognizer:
     )
     return recognizer
 
+def create_fireredasr(samplerate: int, args) -> sherpa_onnx.OnlineRecognizer:
+    d = os.path.join(
+        args.models_root, 'sherpa-onnx-fire-red-asr-large-zh_en-2025-02-16')
+    if not os.path.exists(d):
+        raise ValueError(f"asr: model not found {d}")
+
+    encoder = os.path.join(d, "encoder.int8.onnx")
+    decoder = os.path.join(d, "decoder.int8.onnx")
+    tokens = os.path.join(d, "tokens.txt")
+
+    recognizer = sherpa_onnx.OfflineRecognizer.from_fire_red_asr(
+        encoder=encoder,
+        decoder=decoder,
+        tokens=tokens,
+        debug=0,
+        provider=args.asr_provider,
+    )
+    return recognizer
+
+
 
 def load_asr_engine(samplerate: int, args) -> sherpa_onnx.OnlineRecognizer:
     cache_engine = _asr_engines.get(args.asr_model)
@@ -198,6 +218,9 @@ def load_asr_engine(samplerate: int, args) -> sherpa_onnx.OnlineRecognizer:
         _asr_engines['vad'] = load_vad_engine(samplerate, args)
     elif args.asr_model == 'paraformer-en':
         cache_engine = create_paraformer_en(samplerate, args)
+        _asr_engines['vad'] = load_vad_engine(samplerate, args)
+    elif args.asr_model == 'fireredasr':
+        cache_engine = create_fireredasr(samplerate, args)
         _asr_engines['vad'] = load_vad_engine(samplerate, args)
     else:
         raise ValueError(f"asr: unknown model {args.asr_model}")

@@ -172,13 +172,13 @@ if __name__ == "__main__":
                         help="model root directory")
 
     parser.add_argument("--asr-model", type=str, default='sensevoice',
-                        help="ASR model name: zipformer-bilingual, sensevoice, paraformer-trilingual, paraformer-en")
+                        help="ASR model name: zipformer-bilingual, sensevoice, paraformer-trilingual, paraformer-en, fireredasr")
 
     parser.add_argument("--asr-lang", type=str, default='zh',
                         help="ASR language, zh, en, ja, ko, yue")
 
     parser.add_argument("--tts-model", type=str, default='vits-zh-hf-theresa',
-                        help="TTS model name: vits-zh-hf-theresa, vits-melo-tts-zh_en")
+                        help="TTS model name: vits-zh-hf-theresa, vits-melo-tts-zh_en, kokoro-multi-lang-v1_0")
 
     args = parser.parse_args()
 

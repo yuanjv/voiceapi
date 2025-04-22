@@ -23,7 +23,7 @@ tts_configs = {
         'dict_dir': 'dict',
         'tokens': 'tokens.txt',
         'sample_rate': 22050,
-        # 'rule_fsts': ['phone.fst', 'date.fst', 'number.fst'],
+        'rule_fsts': ['phone.fst', 'date.fst', 'number.fst', 'new_heteronym.fst'],
     },
     'vits-melo-tts-zh_en': {
         'model': 'model.onnx',
@@ -31,7 +31,15 @@ tts_configs = {
         'dict_dir': 'dict',
         'tokens': 'tokens.txt',
         'sample_rate': 44100,
-        'rule_fsts': ['phone.fst', 'date.fst', 'number.fst'],
+        'rule_fsts': ['phone.fst', 'date.fst', 'number.fst', 'new_heteronym.fst'],
+    },
+    'kokoro-multi-lang-v1_0': {
+        'model': 'model.onnx',
+        'lexicon': ['lexicon-zh.txt','lexicon-us-en.txt','lexicon-gb-en.txt'],
+        'dict_dir': 'dict',
+        'tokens': 'tokens.txt',
+        'sample_rate': 24000,
+        'rule_fsts': ['date-zh.fst', 'number-zh.fst'],
     },
 }
 
@@ -43,11 +51,13 @@ def load_tts_model(name: str, model_root: str, provider: str, num_threads: int =
     for f in cfg.get('rule_fsts', ''):
         fsts.append(os.path.join(model_dir, f))
     tts_rule_fsts = ','.join(fsts) if fsts else ''
-
+    lexicons = []
+    for f in cfg['lexicon']:
+        lexicons.append(os.path.join(model_dir, f))
     model_config = sherpa_onnx.OfflineTtsModelConfig(
         vits=sherpa_onnx.OfflineTtsVitsModelConfig(
             model=os.path.join(model_dir, cfg['model']),
-            lexicon=os.path.join(model_dir, cfg['lexicon']),
+            lexicon=lexicons,
             dict_dir=os.path.join(model_dir, cfg['dict_dir']),
             tokens=os.path.join(model_dir, cfg['tokens']),
         ),
