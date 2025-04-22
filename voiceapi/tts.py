@@ -56,6 +56,7 @@ def load_tts_model(name: str, model_root: str, provider: str, num_threads: int =
     if 'kokoro' in name:
         kokoro_model_config = sherpa_onnx.OfflineTtsKokoroModelConfig(
             model=os.path.join(model_dir, cfg['model']),
+            voices=os.path.join(model_dir, 'voices.bin'),
             lexicon=cfg['lexicon'],
             dict_dir=os.path.join(model_dir, cfg['dict_dir']),
             tokens=os.path.join(model_dir, cfg['tokens']),
