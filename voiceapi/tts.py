@@ -71,7 +71,7 @@ def load_tts_model(name: str, model_root: str, provider: str, num_threads: int =
     elif 'vits' in name:
         vits_model_config = sherpa_onnx.OfflineTtsVitsModelConfig(
             model=os.path.join(model_dir, cfg['model']),
-            lexicon=cfg['lexicon'],
+            lexicon=os.path.join(model_dir, cfg['lexicon']),
             dict_dir=os.path.join(model_dir, cfg['dict_dir']),
             tokens=os.path.join(model_dir, cfg['tokens']),
         )
