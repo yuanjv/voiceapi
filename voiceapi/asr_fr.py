@@ -1,15 +1,23 @@
-from typing import *
+from typing import Union
 import logging
 import time
-import logging
-import sherpa_onnx
 import os
 import asyncio
 import numpy as np
+import sherpa_onnx
+from dataclasses import dataclass
 
 logger = logging.getLogger(__file__)
-_asr_engines = {}
 
+# Global storage for the Voice Activity Detector
+_vad_engine: sherpa_onnx.VoiceActivityDetector = None
+
+@dataclass
+class ASRConfig:
+    samplerate: int
+    models_root: str
+    asr_provider: str
+    threads: int
 
 class ASRResult:
     def __init__(self, text: str, finished: bool, idx: int):
@@ -20,157 +28,119 @@ class ASRResult:
     def to_dict(self):
         return {"text": self.text, "finished": self.finished, "idx": self.idx}
 
-
 class ASRStream:
-    def __init__(self, recognizer: Union[sherpa_onnx.OnlineRecognizer | sherpa_onnx.OfflineRecognizer], sample_rate: int) -> None:
+    def __init__(self, recognizer: sherpa_onnx.OfflineRecognizer, sample_rate: int) -> None:
         self.recognizer = recognizer
         self.inbuf = asyncio.Queue()
         self.outbuf = asyncio.Queue()
         self.sample_rate = sample_rate
         self.is_closed = False
-        self.online = isinstance(recognizer, sherpa_onnx.OnlineRecognizer)
 
     async def start(self):
-        if self.online:
-            asyncio.create_task(self.run_online())
-        else:
-            asyncio.create_task(self.run_offline())
+        asyncio.create_task(self._run_offline())
 
-    async def run_online(self):
-        stream = self.recognizer.create_stream()
-        last_result = ""
-        segment_id = 0
-        logger.info('asr: start real-time recognizer')
-        while not self.is_closed:
-            samples = await self.inbuf.get()
-            stream.accept_waveform(self.sample_rate, samples)
-            while self.recognizer.is_ready(stream):
-                self.recognizer.decode_stream(stream)
+    async def _run_offline(self):
+        global _vad_engine
+        if _vad_engine is None:
+            raise RuntimeError("VAD engine not initialized")
 
-            is_endpoint = self.recognizer.is_endpoint(stream)
-            result = self.recognizer.get_result(stream)
-
-            if result and (last_result != result):
-                last_result = result
-                logger.info(f' > {segment_id}:{result}')
-                self.outbuf.put_nowait(
-                    ASRResult(result, False, segment_id))
-
-            if is_endpoint:
-                if result:
-                    logger.info(f'{segment_id}: {result}')
-                    self.outbuf.put_nowait(
-                        ASRResult(result, True, segment_id))
-                    segment_id += 1
-                self.recognizer.reset(stream)
-
-    async def run_offline(self):
-        vad = _asr_engines['vad']
+        logger.info('ASR: starting offline stream')
         segment_id = 0
         st = None
+
         while not self.is_closed:
             samples = await self.inbuf.get()
-            vad.accept_waveform(samples)
-            while not vad.empty():
-                if not st:
+            _vad_engine.accept_waveform(samples)
+            while not _vad_engine.empty():
+                if st is None:
                     st = time.time()
                 stream = self.recognizer.create_stream()
-                stream.accept_waveform(self.sample_rate, vad.front.samples)
-
-                vad.pop()
+                stream.accept_waveform(self.sample_rate, _vad_engine.front.samples)
+                _vad_engine.pop()
                 self.recognizer.decode_stream(stream)
 
-                result = stream.result.text.strip()
-                if result:
+                result_text = stream.result.text.strip()
+                if result_text:
                     duration = time.time() - st
-                    logger.info(f'{segment_id}:{result} ({duration:.2f}s)')
-                    self.outbuf.put_nowait(ASRResult(result, True, segment_id))
+                    logger.info(f"{segment_id}: {result_text} ({duration:.2f}s)")
+                    await self.outbuf.put(ASRResult(result_text, True, segment_id))
                     segment_id += 1
-            st = None
+                st = None
 
     async def close(self):
         self.is_closed = True
-        self.outbuf.put_nowait(None)
+        await self.outbuf.put(None)
 
     async def write(self, pcm_bytes: bytes):
         pcm_data = np.frombuffer(pcm_bytes, dtype=np.int16)
         samples = pcm_data.astype(np.float32) / 32768.0
-        self.inbuf.put_nowait(samples)
+        await self.inbuf.put(samples)
 
     async def read(self) -> ASRResult:
         return await self.outbuf.get()
 
 
+def _initialize_firered(config: ASRConfig) -> sherpa_onnx.OfflineRecognizer:
+    """
+    Initialize the firered ASR engine and global VAD engine using ASRConfig.
+    """
+    global _vad_engine
 
-def create_fireredasr(samplerate: int, args) -> sherpa_onnx.OnlineRecognizer:
-    d = os.path.join(
-        args.models_root, 'sherpa-onnx-fire-red-asr-large-zh_en-2025-02-16')
-    if not os.path.exists(d):
-        raise ValueError(f"asr: model not found {d}")
+    model_dir = os.path.join(
+        config.models_root,
+        'sherpa-onnx-fire-red-asr-large-zh_en-2025-02-16'
+    )
+    if not os.path.isdir(model_dir):
+        raise ValueError(f"ASR model directory not found: {model_dir}")
 
-    encoder = os.path.join(d, "encoder.int8.onnx")
-    decoder = os.path.join(d, "decoder.int8.onnx")
-    tokens = os.path.join(d, "tokens.txt")
+    encoder = os.path.join(model_dir, "encoder.int8.onnx")
+    decoder = os.path.join(model_dir, "decoder.int8.onnx")
+    tokens = os.path.join(model_dir, "tokens.txt")
 
     recognizer = sherpa_onnx.OfflineRecognizer.from_fire_red_asr(
         encoder=encoder,
         decoder=decoder,
         tokens=tokens,
         debug=0,
-        provider=args.asr_provider,
+        provider=config.asr_provider,
     )
+
+    _vad_engine = _create_vad_engine(config)
     return recognizer
 
 
-
-def load_asr_engine(samplerate: int, args) -> sherpa_onnx.OnlineRecognizer:
-    cache_engine = _asr_engines.get(args.asr_model)
-    if cache_engine:
-        return cache_engine
-    st = time.time()
-    if args.asr_model == 'zipformer-bilingual':
-        cache_engine = create_zipformer(samplerate, args)
-    elif args.asr_model == 'sensevoice':
-        cache_engine = create_sensevoice(samplerate, args)
-        _asr_engines['vad'] = load_vad_engine(samplerate, args)
-    elif args.asr_model == 'paraformer-trilingual':
-        cache_engine = create_paraformer_trilingual(samplerate, args)
-        _asr_engines['vad'] = load_vad_engine(samplerate, args)
-    elif args.asr_model == 'paraformer-en':
-        cache_engine = create_paraformer_en(samplerate, args)
-        _asr_engines['vad'] = load_vad_engine(samplerate, args)
-    elif args.asr_model == 'fireredasr':
-        cache_engine = create_fireredasr(samplerate, args)
-        _asr_engines['vad'] = load_vad_engine(samplerate, args)
-    else:
-        raise ValueError(f"asr: unknown model {args.asr_model}")
-    _asr_engines[args.asr_model] = cache_engine
-    logger.info(f"asr: engine loaded in {time.time() - st:.2f}s")
-    return cache_engine
-
-
-def load_vad_engine(samplerate: int, args, min_silence_duration: float = 0.25, buffer_size_in_seconds: int = 100) -> sherpa_onnx.VoiceActivityDetector:
-    config = sherpa_onnx.VadModelConfig()
-    d = os.path.join(args.models_root, 'silero_vad')
-    if not os.path.exists(d):
-        raise ValueError(f"vad: model not found {d}")
-
-    config.silero_vad.model = os.path.join(d, 'silero_vad.onnx')
-    config.silero_vad.min_silence_duration = min_silence_duration
-    config.sample_rate = samplerate
-    config.provider = args.asr_provider
-    config.num_threads = args.threads
-
-    vad = sherpa_onnx.VoiceActivityDetector(
-        config,
-        buffer_size_in_seconds=buffer_size_in_seconds)
-    return vad
-
-
-async def start_asr_stream(samplerate: int, args) -> ASRStream:
+def _create_vad_engine(config: ASRConfig,
+                       min_silence_duration: float = 0.25,
+                       buffer_size: int = 100
+) -> sherpa_onnx.VoiceActivityDetector:
     """
-    Start a ASR stream
+    Load and configure the Silero VAD model using ASRConfig.
     """
-    stream = ASRStream(load_asr_engine(samplerate, args), samplerate)
+    vad_dir = os.path.join(config.models_root, 'silero_vad')
+    if not os.path.isdir(vad_dir):
+        raise ValueError(f"VAD model directory not found: {vad_dir}")
+
+    cfg = sherpa_onnx.VadModelConfig()
+    cfg.silero_vad.model = os.path.join(vad_dir, 'silero_vad.onnx')
+    cfg.silero_vad.min_silence_duration = min_silence_duration
+    cfg.sample_rate = config.samplerate
+    cfg.provider = config.asr_provider
+    cfg.num_threads = config.threads
+
+    return sherpa_onnx.VoiceActivityDetector(
+        cfg,
+        buffer_size_in_seconds=buffer_size
+    )
+
+async def start_asr_stream(config: ASRConfig) -> ASRStream:
+    """
+    Initialize firered ASR engine and start an ASR stream.
+
+    Args:
+      config: ASRConfig containing samplerate, models_root, asr_provider, and threads
+    """
+    recognizer = _initialize_firered(config)
+    stream = ASRStream(recognizer, config.samplerate)
     await stream.start()
     return stream
+
